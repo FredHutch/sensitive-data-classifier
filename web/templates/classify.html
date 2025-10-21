@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Document Classification</h2>
+
+<form id="classify-form" class="card" enctype="multipart/form-data">
+  <div class="dropzone" id="dropzone">
+    <p>Drop files here or click to select</p>
+    <input id="file-input" type="file" name="files" multiple>
+    <small>Supported: .txt, .docx, .pdf, .csv, .xlsx</small>
+  </div>
+  <button type="submit" class="btn btn-primary">Classify</button>
+</form>
+
+<section id="results" class="card" style="display:none;">
+  <h3>Results</h3>
+  <div id="results-list"></div>
+</section>
+{% endblock %}
