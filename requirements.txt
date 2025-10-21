@@ -40,8 +40,6 @@ factory-boy>=3.3.0
 # Security and Cryptography
 cryptography>=41.0.0
 pycryptodome>=3.18.0
-secrets>=3.8.0
-hashlib>=20081119
 
 # Medical Vocabulary Integration
 umls-downloader>=0.1.6
@@ -93,7 +91,6 @@ markupsafe>=2.1.0
 
 # Production Dependencies
 supervisor>=4.2.0
-nginx>=1.18.0  # Note: This is typically installed via system package manager
 
 # Medical Standards Support (optional)
 fhir.resources>=6.5.0
