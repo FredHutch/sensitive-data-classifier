@@ -10,6 +10,7 @@ from datetime import datetime
 
 from flask import render_template, request, jsonify, current_app
 from . import web_bp
+from .auth import require_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ def generate_page():
     return render_template("generate.html")
 
 @web_bp.route("/api/classify", methods=["POST"])
+@require_api_key
 def api_classify():
     """REST API endpoint for document classification."""
     files = request.files.getlist("files")
@@ -83,6 +85,7 @@ def api_classify():
     })
 
 @web_bp.route("/api/generate", methods=["POST"])
+@require_api_key
 def api_generate():
     """REST API endpoint for synthetic data generation."""
     data = request.get_json(silent=True) or {}

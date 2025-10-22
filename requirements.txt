@@ -1,109 +1,80 @@
-# Core ML and Data Science
-numpy>=1.24.0
-pandas>=2.0.0
-scikit-learn>=1.3.0
-joblib>=1.3.0
-scipy>=1.10.0
+# PHI Classifier & Synthetic Data Generator - Production Requirements
+# Version: 2.0.0
+# Optimized for moderate compute (CPU-friendly, with optional GPU support)
 
-# Web Framework
-flask>=2.3.0
-werkzeug>=2.3.0
-gunicorn>=21.2.0
-uWSGI>=2.0.21
-
-# Advanced NLP and AI
-transformers>=4.30.0
+# ============================================
+# Core ML and NLP (Required for classification)
+# ============================================
+transformers>=4.35.0
 torch>=2.0.0
-torchvision>=0.15.0
-torchaudio>=2.0.0
+# For GPU support, install torch with CUDA:
+# pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+# NLP and tokenization
+tokenizers>=0.15.0
 sentence-transformers>=2.2.0
-huggingface-hub>=0.15.0
-tokenizers>=0.13.0
+huggingface-hub>=0.19.0
 
-# Specialized Medical NLP Models
-# BioBERT and ClinicalBERT for medical domain
-# These will be downloaded at runtime
+# Traditional ML (for hybrid approaches)
+numpy>=1.24.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
 
+# ============================================
+# Web Framework
+# ============================================
+flask>=3.0.0
+werkzeug>=3.0.0
+gunicorn>=21.2.0
+
+# ============================================
 # Document Processing
-python-docx>=0.8.11
-openpyxl>=3.1.0
+# ============================================
+python-docx>=1.1.0
+openpyxl>=3.1.2
 PyPDF2>=3.0.1
-pdfplumber>=0.9.0
-pdfminer.six>=20221105
-docx2txt>=0.8
-pandas[excel]>=2.0.0
-
-# Data Generation
-faker>=19.0.0
-factory-boy>=3.3.0
-
-# Security and Cryptography
-cryptography>=41.0.0
-pycryptodome>=3.18.0
-
-# Medical Vocabulary Integration
-umls-downloader==0.1.3
-requests>=2.31.0
-requests-oauthlib>=1.3.1
-urllib3>=2.0.0
-
-# Database and Caching (optional)
-redis>=4.6.0
-celery>=5.3.0
-sqlalchemy>=2.0.0
-
-# API and Web Utilities
-flask-cors>=4.0.0
-flask-limiter>=3.3.0
-flask-caching>=2.0.0
-werkzeug>=2.3.0
-
-# File Format Support
-chardet>=5.1.0
+pdfplumber>=0.10.3
+chardet>=5.2.0
 python-magic>=0.4.27
-filetype>=1.2.0
 
-# Configuration and Environment
+# ============================================
+# Security & Encryption
+# ============================================
+cryptography>=41.0.5
+
+# ============================================
+# API Enhancement (Optional but recommended)
+# ============================================
+# Uncomment if using Redis for rate limiting:
+# redis>=5.0.0
+# flask-limiter>=3.5.0
+
+# Uncomment if enabling CORS:
+# flask-cors>=4.0.0
+
+# ============================================
+# Configuration & Environment
+# ============================================
 python-dotenv>=1.0.0
-click>=8.1.0
-toml>=0.10.2
-pyyaml>=6.0
+pyyaml>=6.0.1
 
-# Logging and Monitoring
-loguru>=0.7.0
-psutil>=5.9.0
+# ============================================
+# Data Generation & Faker
+# ============================================
+faker>=20.1.0
 
-# Development and Testing
-pytest>=7.4.0
-pytest-cov>=4.1.0
-pytest-flask>=1.2.0
-flake8>=6.0.0
-black>=23.0.0
-mypy>=1.4.0
-isort>=5.12.0
-
-# Additional Utilities
-tqdm>=4.65.0
+# ============================================
+# Logging and Utilities
+# ============================================
+tqdm>=4.66.1
 colorama>=0.4.6
-tabulate>=0.9.0
-jinja2>=3.1.0
-markupsafe>=2.1.0
 
-# Production Dependencies
-supervisor>=4.2.0
-
-# Medical Standards Support (optional)
-fhir.resources>=6.5.0
-hl7apy>=1.3.4
-
-# Performance Optimization
-numexpr>=2.8.0
-bottleneck>=1.3.0
-
-# Date and Time Utilities
-python-dateutil>=2.8.0
-pytz>=2023.3
-
-# Web Security
-flask-talisman>=1.1.0
-flask-seasurf>=0.3.1
+# ============================================
+# Development & Testing (install with pip install -e ".[dev]")
+# ============================================
+# pytest>=7.4.3
+# pytest-cov>=4.1.0
+# pytest-flask>=1.3.0
+# flake8>=6.1.0
+# black>=23.11.0
+# mypy>=1.7.0

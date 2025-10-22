@@ -41,6 +41,7 @@ except ImportError:
     HAS_OPENPYXL = False
 
 from .security import SecurityManager
+from .clinical_coherence import ClinicalCoherenceEngine
 
 logger = logging.getLogger(__name__)
 
@@ -504,14 +505,15 @@ class SyntheticHealthDataGenerator:
     def __init__(self):
         self.security_manager = SecurityManager()
         self.medical_vocabulary = ComprehensiveMedicalVocabulary()
-        
+        self.clinical_coherence = ClinicalCoherenceEngine()
+
         # Basic name and demographic data
         self.demographics = self._initialize_demographics()
-        
+
         # Document templates
         self.document_templates = self._initialize_comprehensive_templates()
-        
-        logger.info("Advanced Synthetic Health Data Generator initialized with comprehensive medical vocabularies")
+
+        logger.info("Advanced Synthetic Health Data Generator initialized with comprehensive medical vocabularies and clinical coherence")
     
     def _initialize_demographics(self) -> Dict[str, List[str]]:
         """
@@ -663,18 +665,37 @@ class SyntheticHealthDataGenerator:
         fax_number = f"({random.randint(200, 999)}) {random.randint(200, 999)}-{random.randint(1000, 9999)}"
         email = f"{first_name.lower()}.{last_name.lower()}@{random.choice(['email.com', 'healthcare.org', 'patient.net'])}"
         
-        # Medical information using authoritative vocabularies
-        primary_diagnosis, icd10_code = self.medical_vocabulary.get_realistic_diagnosis()
-        
-        # Multiple secondary diagnoses
-        secondary_diagnoses = []
-        for _ in range(random.randint(0, 4)):
-            secondary_dx, _ = self.medical_vocabulary.get_realistic_diagnosis()
-            secondary_diagnoses.append(secondary_dx)
-        
-        # Realistic medications with complete prescribing information
+        # Medical information using authoritative vocabularies with clinical coherence
+        # Generate diagnosis appropriate for age/gender
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            primary_diagnosis, icd10_code = self.medical_vocabulary.get_realistic_diagnosis()
+            if self.clinical_coherence.is_diagnosis_appropriate_for_demographics(
+                primary_diagnosis, age, gender
+            ):
+                break
+
+        # Get clinically appropriate secondary diagnoses (comorbidities)
+        secondary_diagnoses = self.clinical_coherence.get_appropriate_secondary_diagnoses(
+            primary_diagnosis, age, num_secondary=random.randint(0, 3)
+        )
+
+        # Get clinically appropriate medications for primary diagnosis
+        appropriate_med_categories = self.clinical_coherence.get_appropriate_medications(
+            primary_diagnosis, num_medications=random.randint(2, 6)
+        )
+
         medications = []
-        for _ in range(random.randint(1, 8)):
+        for med_category in appropriate_med_categories:
+            try:
+                med_info = self.medical_vocabulary.get_realistic_medication(category=med_category)
+                medications.append(med_info)
+            except (KeyError, IndexError):
+                # Category not in vocabulary, skip
+                continue
+
+        # Ensure at least one medication
+        if not medications:
             med_info = self.medical_vocabulary.get_realistic_medication()
             medications.append(med_info)
         
@@ -686,9 +707,12 @@ class SyntheticHealthDataGenerator:
         
         # Realistic vital signs
         vital_signs = self._generate_comprehensive_vital_signs()
-        
-        # Comprehensive lab results
+
+        # Comprehensive lab results with clinical coherence
         lab_results = self._generate_comprehensive_lab_results(gender, age)
+        lab_results = self.clinical_coherence.adjust_lab_values_for_diagnosis(
+            primary_diagnosis, lab_results
+        )
         
         # Provider information
         attending_physician = f"{random.choice(self.demographics['first_names_male'] + self.demographics['first_names_female'])} {random.choice(self.demographics['last_names'])}"
