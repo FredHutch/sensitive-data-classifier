@@ -4,26 +4,8 @@ Configuration Package
 Provides environment-based configuration management for the PHI classifier application.
 """
 
-from .settings import (
-    Config,
-    DevelopmentConfig,
-    TestingConfig,
-    StagingConfig,
-    ProductionConfig,
-    get_config,
-    setup_logging,
-    validate_config,
-    config
-)
+from .app_config import Config
 
 __all__ = [
-    'Config',
-    'DevelopmentConfig', 
-    'TestingConfig',
-    'StagingConfig',
-    'ProductionConfig',
-    'get_config',
-    'setup_logging',
-    'validate_config',
-    'config'
+    'Config'
 ]
