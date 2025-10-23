@@ -1076,46 +1076,160 @@ Fax Sent To: {provider_fax}
     def _convert_to_format(self, content: str, format_type: str, patient: SyntheticPatientRecord) -> Any:
         """
         Convert content to specific file formats
-        
+
         Args:
             content (str): Text content
             format_type (str): Target format
             patient (SyntheticPatientRecord): Patient data
-            
+
         Returns:
-            Any: Formatted content
+            Any: Formatted content (str for text formats, bytes for binary formats)
         """
         if format_type == 'json':
             return json.dumps(asdict(patient), indent=2, default=str)
-        
+
         elif format_type == 'csv':
             output = io.StringIO()
             writer = csv.writer(output)
-            
+
             # Convert patient record to CSV format
             patient_dict = asdict(patient)
             writer.writerow(['Field', 'Value', 'Category'])
-            
+
             for key, value in patient_dict.items():
                 category = self._categorize_field(key)
                 if isinstance(value, (list, dict)):
                     value = json.dumps(value) if isinstance(value, dict) else '; '.join(map(str, value))
                 writer.writerow([key.replace('_', ' ').title(), str(value), category])
-            
+
             return output.getvalue()
-        
+
         elif format_type == 'xml':
             # Generate XML format
             xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
             xml_content += '<medical_record>\n'
-            
+
             patient_dict = asdict(patient)
             for key, value in patient_dict.items():
                 xml_content += f'  <{key}>{self._escape_xml(str(value))}</{key}>\n'
-            
+
             xml_content += '</medical_record>'
             return xml_content
-        
+
+        elif format_type in ('docx', 'doc'):
+            # Generate DOCX format (Word document)
+            if not HAS_DOCX:
+                logger.warning("python-docx not available, falling back to text")
+                return content
+
+            doc = DocxDocument()
+
+            # Add title
+            doc.add_heading('Medical Record', 0)
+
+            # Add patient demographics section
+            doc.add_heading('Patient Demographics', level=1)
+            doc.add_paragraph(f"Name: {patient.first_name} {patient.last_name}")
+            doc.add_paragraph(f"Date of Birth: {patient.date_of_birth}")
+            doc.add_paragraph(f"Age: {patient.age}")
+            doc.add_paragraph(f"Gender: {patient.gender}")
+            doc.add_paragraph(f"MRN: {patient.mrn}")
+            doc.add_paragraph(f"SSN: {patient.ssn}")
+
+            # Add contact information
+            doc.add_heading('Contact Information', level=1)
+            doc.add_paragraph(f"Address: {patient.street_address}, {patient.city}, {patient.state} {patient.zip_code}")
+            doc.add_paragraph(f"Phone (Home): {patient.phone_home}")
+            doc.add_paragraph(f"Phone (Mobile): {patient.phone_mobile}")
+            doc.add_paragraph(f"Email: {patient.email}")
+
+            # Add medical content
+            doc.add_heading('Medical Information', level=1)
+            doc.add_paragraph(content)
+
+            # Save to bytes
+            docx_bytes = io.BytesIO()
+            doc.save(docx_bytes)
+            docx_bytes.seek(0)
+            return docx_bytes.getvalue()
+
+        elif format_type == 'pdf':
+            # Generate PDF format
+            if not HAS_REPORTLAB:
+                logger.warning("reportlab not available, falling back to text")
+                return content
+
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+            from reportlab.lib.enums import TA_LEFT, TA_CENTER
+
+            pdf_bytes = io.BytesIO()
+            doc_pdf = SimpleDocTemplate(pdf_bytes, pagesize=letter,
+                                   rightMargin=72, leftMargin=72,
+                                   topMargin=72, bottomMargin=18)
+
+            # Container for the 'Flowable' objects
+            elements = []
+            styles = getSampleStyleSheet()
+
+            # Custom styles
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor='#000000',
+                spaceAfter=30,
+                alignment=TA_CENTER
+            )
+
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor='#000000',
+                spaceAfter=12,
+                spaceBefore=12
+            )
+
+            # Add title
+            elements.append(Paragraph("MEDICAL RECORD", title_style))
+            elements.append(Spacer(1, 12))
+
+            # Patient demographics
+            elements.append(Paragraph("Patient Demographics", heading_style))
+            elements.append(Paragraph(f"Name: {patient.first_name} {patient.last_name}", styles['Normal']))
+            elements.append(Paragraph(f"Date of Birth: {patient.date_of_birth}", styles['Normal']))
+            elements.append(Paragraph(f"Age: {patient.age} years", styles['Normal']))
+            elements.append(Paragraph(f"Gender: {patient.gender}", styles['Normal']))
+            elements.append(Paragraph(f"MRN: {patient.mrn}", styles['Normal']))
+            elements.append(Paragraph(f"SSN: {patient.ssn}", styles['Normal']))
+            elements.append(Spacer(1, 12))
+
+            # Contact information
+            elements.append(Paragraph("Contact Information", heading_style))
+            elements.append(Paragraph(f"Address: {patient.street_address}, {patient.city}, {patient.state} {patient.zip_code}", styles['Normal']))
+            elements.append(Paragraph(f"Phone (Home): {patient.phone_home}", styles['Normal']))
+            elements.append(Paragraph(f"Phone (Mobile): {patient.phone_mobile}", styles['Normal']))
+            elements.append(Paragraph(f"Email: {patient.email}", styles['Normal']))
+            elements.append(Spacer(1, 12))
+
+            # Medical content
+            elements.append(Paragraph("Medical Information", heading_style))
+            # Split content into paragraphs
+            for para in content.split('\n\n'):
+                if para.strip():
+                    # Escape special characters for ReportLab
+                    safe_para = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    elements.append(Paragraph(safe_para, styles['Normal']))
+                    elements.append(Spacer(1, 6))
+
+            # Build PDF
+            doc_pdf.build(elements)
+            pdf_bytes.seek(0)
+            return pdf_bytes.getvalue()
+
         else:
             return content
     

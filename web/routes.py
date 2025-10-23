@@ -117,10 +117,18 @@ def api_generate():
                 filename = doc.get("filename", f"synthetic_{doc.get('document_id')}.txt")
                 file_path = output_path / filename
 
-                # Write content to file
+                # Write content to file (handle both text and binary formats)
                 content = doc.get("content", "")
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
+
+                # Check if content is binary (bytes) or text (str)
+                if isinstance(content, bytes):
+                    # Binary format (PDF, DOCX)
+                    with open(file_path, 'wb') as f:
+                        f.write(content)
+                else:
+                    # Text format (TXT, JSON, CSV, XML)
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
 
                 saved_files.append({
                     "filename": filename,
