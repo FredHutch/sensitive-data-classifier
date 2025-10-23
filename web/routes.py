@@ -6,9 +6,12 @@ Web interface and REST API endpoints for PHI classification system.
 
 import json
 import logging
+import zipfile
+import io
 from datetime import datetime
+from pathlib import Path
 
-from flask import render_template, request, jsonify, current_app
+from flask import render_template, request, jsonify, current_app, send_file, send_from_directory
 from . import web_bp
 from .auth import require_api_key
 
@@ -133,7 +136,8 @@ def api_generate():
                 saved_files.append({
                     "filename": filename,
                     "path": str(file_path),
-                    "size_bytes": doc.get("file_size_bytes", 0)
+                    "size_bytes": doc.get("file_size_bytes", 0),
+                    "download_url": f"/downloads/{filename}"
                 })
                 logger.info(f"Saved generated document to {file_path}")
 
@@ -143,6 +147,8 @@ def api_generate():
             "saved_to_disk": save_to_disk,
             "output_directory": str(output_path) if save_to_disk else None,
             "saved_files": saved_files if save_to_disk else [],
+            "download_all_url": "/api/downloads/zip" if save_to_disk and saved_files else None,
+            "list_files_url": "/api/downloads/list",
             "documents": [
                 {
                     "id": doc.get("document_id"),
@@ -153,7 +159,8 @@ def api_generate():
                     "phi_density": doc.get("phi_density", 0),
                     "file_size_bytes": doc.get("file_size_bytes", 0),
                     "medical_complexity": doc.get("medical_complexity", "unknown"),
-                    "created_date": doc.get("created_date")
+                    "created_date": doc.get("created_date"),
+                    "download_url": f"/downloads/{doc.get('filename')}" if save_to_disk else None
                 }
                 for doc in docs
             ],
@@ -186,3 +193,80 @@ def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat()
     })
+
+@web_bp.route("/api/downloads/list")
+def list_downloads():
+    """List all generated files available for download."""
+    output_dir = current_app.config.get("UPLOAD_FOLDER")
+    generated_path = Path(output_dir) / "generated"
+
+    if not generated_path.exists():
+        return jsonify({
+            "status": "success",
+            "files": [],
+            "count": 0,
+            "message": "No files generated yet"
+        })
+
+    files = []
+    for file_path in generated_path.iterdir():
+        if file_path.is_file():
+            files.append({
+                "filename": file_path.name,
+                "size_bytes": file_path.stat().st_size,
+                "created": datetime.fromtimestamp(file_path.stat().st_ctime).isoformat(),
+                "download_url": f"/downloads/{file_path.name}"
+            })
+
+    # Sort by creation time, newest first
+    files.sort(key=lambda x: x['created'], reverse=True)
+
+    return jsonify({
+        "status": "success",
+        "files": files,
+        "count": len(files),
+        "timestamp": datetime.now().isoformat()
+    })
+
+@web_bp.route("/api/downloads/<filename>")
+def download_file(filename):
+    """Download a specific generated file."""
+    output_dir = current_app.config.get("UPLOAD_FOLDER")
+    generated_path = Path(output_dir) / "generated"
+
+    # Security: prevent directory traversal
+    safe_filename = Path(filename).name
+    file_path = generated_path / safe_filename
+
+    if not file_path.exists():
+        return jsonify({"error": "File not found"}), 404
+
+    return send_from_directory(generated_path, safe_filename, as_attachment=True)
+
+@web_bp.route("/api/downloads/zip")
+def download_all_zip():
+    """Download all generated files as a ZIP archive."""
+    output_dir = current_app.config.get("UPLOAD_FOLDER")
+    generated_path = Path(output_dir) / "generated"
+
+    if not generated_path.exists() or not any(generated_path.iterdir()):
+        return jsonify({"error": "No files available for download"}), 404
+
+    # Create ZIP file in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for file_path in generated_path.iterdir():
+            if file_path.is_file():
+                zip_file.write(file_path, arcname=file_path.name)
+
+    zip_buffer.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"synthetic_health_data_{timestamp}.zip"
+
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=zip_filename
+    )
