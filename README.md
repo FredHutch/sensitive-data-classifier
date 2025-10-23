@@ -49,6 +49,47 @@ A production-ready, HIPAA-compliant Python application for automated detection o
 
 ## Architecture
 
+### System Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Client Browser                     │
+│               or API Client (curl, etc.)            │
+└────────────────────┬────────────────────────────────┘
+                     │ HTTP (Port 80)
+                     ▼
+        ┌────────────────────────────┐
+        │      Nginx Reverse Proxy    │
+        │  - Load Balancing           │
+        │  - SSL/TLS Termination      │
+        │  - Static File Serving      │
+        │  - Request Routing          │
+        └────────────┬───────────────┘
+                     │ Internal (Port 5000)
+                     ▼
+        ┌────────────────────────────┐
+        │   Flask Application         │
+        │   (Gunicorn WSGI Server)   │
+        │  - Web UI                   │
+        │  - REST API                 │
+        │  - Business Logic           │
+        └────────────┬───────────────┘
+                     │
+        ┌────────────┴────────────────┐
+        │                             │
+        ▼                             ▼
+┌──────────────┐           ┌──────────────────┐
+│   ML Models   │           │  Redis (Optional) │
+│ - BioBERT NER │           │  - Rate Limiting  │
+│ - BART        │           │  - Caching        │
+│ - ClinicalBERT│           └──────────────────┘
+└──────────────┘
+```
+
+**Important**: All client access goes through **port 80** (nginx). Port 5000 is internal to Docker and not exposed to the host.
+
+### Directory Structure
+
 ```
 /sensitive-data-classifier/
 ├── app.py                          # Main application entry point
@@ -96,9 +137,12 @@ git clone https://github.com/FredHutch/sensitive-data-classifier.git
 cd sensitive-data-classifier
 
 # Build and run with Docker Compose
-docker-compose -f deployment/docker-compose.yml up -d
+cd deployment
+docker-compose up -d
 
 # Access the application
+# Web UI: http://localhost
+# API: http://localhost/api/
 open http://localhost
 ```
 
@@ -187,13 +231,21 @@ X-API-Key: your-api-key-here
 
 #### 1. Classify Documents
 
-```bash
-POST /api/classify
-Content-Type: multipart/form-data
-X-API-Key: your-api-key-here (if required)
+**Endpoint**: `POST /api/classify`
 
-# Example with curl
-curl -X POST http://localhost:5000/api/classify \
+**Headers**:
+- `Content-Type: multipart/form-data`
+- `X-API-Key: your-api-key-here` (if API_KEY_REQUIRED=true)
+
+**Example**:
+```bash
+# Single file
+curl -X POST http://localhost/api/classify \
+  -H "X-API-Key: your-api-key-here" \
+  -F "files=@medical_record.pdf"
+
+# Multiple files
+curl -X POST http://localhost/api/classify \
   -H "X-API-Key: your-api-key-here" \
   -F "files=@medical_record.pdf" \
   -F "files=@lab_report.docx"
@@ -222,50 +274,80 @@ curl -X POST http://localhost:5000/api/classify \
 
 #### 2. Generate Synthetic Data
 
-```bash
-POST /api/generate
-Content-Type: application/json
-X-API-Key: your-api-key-here (if required)
+**Endpoint**: `POST /api/generate`
 
+**Headers**:
+- `Content-Type: application/json`
+- `X-API-Key: your-api-key-here` (if API_KEY_REQUIRED=true)
+
+**Body**:
+```json
 {
   "count": 10,
-  "formats": ["txt", "json", "csv"]
+  "formats": ["txt", "docx", "pdf", "json", "csv"],
+  "save_to_disk": true
 }
+```
+
+**Example**:
+```bash
+curl -X POST http://localhost/api/generate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key-here" \
+  -d '{"count": 10, "formats": ["docx", "pdf"]}'
 ```
 
 **Response:**
 ```json
 {
   "status": "success",
-  "count": 30,
-  "documents": [
+  "count": 10,
+  "saved_to_disk": true,
+  "output_directory": "/app/uploads/generated",
+  "saved_files": [
     {
-      "id": "synthetic_medical_record_0001.txt",
-      "type": "medical_record",
-      "format": "txt",
-      "metadata": {...}
+      "filename": "synthetic_medical_record_0001.docx",
+      "path": "/app/uploads/generated/synthetic_medical_record_0001.docx",
+      "size_bytes": 15234
     }
   ],
-  "timestamp": "2025-10-22T12:34:56"
+  "documents": [
+    {
+      "id": "DOC-abc123",
+      "type": "medical_record",
+      "format": "docx",
+      "filename": "synthetic_medical_record_0001.docx",
+      "contains_phi": true,
+      "phi_density": 0.15,
+      "file_size_bytes": 15234,
+      "medical_complexity": "high",
+      "created_date": "2025-10-23T12:34:56"
+    }
+  ],
+  "timestamp": "2025-10-23T12:34:56"
 }
 ```
 
 #### 3. System Status
 
-```bash
-GET /api/status
+**Endpoint**: `GET /api/status`
 
-# No authentication required
-curl http://localhost:5000/api/status
+**Authentication**: Not required
+
+**Example**:
+```bash
+curl http://localhost/api/status
 ```
 
 #### 4. Model Information
 
-```bash
-GET /api/models/info
+**Endpoint**: `GET /api/models/info`
 
-# No authentication required
-curl http://localhost:5000/api/models/info
+**Authentication**: Not required
+
+**Example**:
+```bash
+curl http://localhost/api/models/info
 ```
 
 **Response:**
@@ -357,16 +439,37 @@ pytest tests/ --cov=core --cov=web --cov-report=html
 
 ### Manual Testing
 
+#### Web UI Testing
 ```bash
-# Test classification
-curl -X POST http://localhost:5000/api/classify \
+# Open web browser
+open http://localhost
+
+# Navigate to "Classify Documents" to test file upload
+# Navigate to "Generate Synthetic Data" to create test files
+```
+
+#### API Testing
+```bash
+# Test classification endpoint
+curl -X POST http://localhost/api/classify \
   -F "files=@test_document.txt"
 
-# Test generation
-curl -X POST http://localhost:5000/api/generate \
+# Test generation endpoint (creates DOCX and PDF files)
+curl -X POST http://localhost/api/generate \
   -H "Content-Type: application/json" \
-  -d '{"count": 5, "formats": ["txt"]}'
+  -d '{"count": 5, "formats": ["txt", "docx", "pdf"]}'
+
+# Check system status
+curl http://localhost/api/status
+
+# View generated files (inside Docker container)
+docker-compose exec app ls -lh /app/uploads/generated/
+
+# Copy generated files to host
+docker cp $(docker-compose ps -q app):/app/uploads/generated ./generated_docs
 ```
+
+**Note**: All API requests go through nginx on port 80. Port 5000 is internal to Docker and not accessible from the host.
 
 ---
 
