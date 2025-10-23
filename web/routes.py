@@ -100,16 +100,60 @@ def api_generate():
         return jsonify({"status":"error","message":"Generator unavailable"}), 503
     
     try:
+        # Generate documents
         docs = generator.generate_synthetic_documents(count=count, formats=formats)
+
+        # Save documents to disk if requested
+        save_to_disk = data.get("save_to_disk", True)  # Default to True for user convenience
+        output_dir = current_app.config.get("UPLOAD_FOLDER")
+        saved_files = []
+
+        if save_to_disk:
+            from pathlib import Path
+            output_path = Path(output_dir) / "generated"
+            output_path.mkdir(parents=True, exist_ok=True)
+
+            for doc in docs:
+                filename = doc.get("filename", f"synthetic_{doc.get('document_id')}.txt")
+                file_path = output_path / filename
+
+                # Write content to file (handle both text and binary formats)
+                content = doc.get("content", "")
+
+                # Check if content is binary (bytes) or text (str)
+                if isinstance(content, bytes):
+                    # Binary format (PDF, DOCX)
+                    with open(file_path, 'wb') as f:
+                        f.write(content)
+                else:
+                    # Text format (TXT, JSON, CSV, XML)
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+
+                saved_files.append({
+                    "filename": filename,
+                    "path": str(file_path),
+                    "size_bytes": doc.get("file_size_bytes", 0)
+                })
+                logger.info(f"Saved generated document to {file_path}")
+
         return jsonify({
             "status": "success",
             "count": len(docs),
+            "saved_to_disk": save_to_disk,
+            "output_directory": str(output_path) if save_to_disk else None,
+            "saved_files": saved_files if save_to_disk else [],
             "documents": [
                 {
-                    "id": doc.get("id"),
-                    "type": doc.get("type"),
+                    "id": doc.get("document_id"),
+                    "type": doc.get("document_type"),
                     "format": doc.get("format"),
-                    "metadata": doc.get("metadata", {})
+                    "filename": doc.get("filename"),
+                    "contains_phi": doc.get("contains_phi", True),
+                    "phi_density": doc.get("phi_density", 0),
+                    "file_size_bytes": doc.get("file_size_bytes", 0),
+                    "medical_complexity": doc.get("medical_complexity", "unknown"),
+                    "created_date": doc.get("created_date")
                 }
                 for doc in docs
             ],
