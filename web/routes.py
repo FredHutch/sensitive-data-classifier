@@ -32,6 +32,11 @@ def generate_page():
     """Synthetic data generation interface."""
     return render_template("generate.html")
 
+@web_bp.route("/downloads")
+def downloads_page():
+    """Downloads page for viewing and downloading generated files."""
+    return render_template("downloads.html")
+
 @web_bp.route("/api/classify", methods=["POST"])
 @require_api_key
 def api_classify():
@@ -254,11 +259,14 @@ def download_all_zip():
 
     # Create ZIP file in memory
     zip_buffer = io.BytesIO()
+
+    # Use context manager to ensure proper closure
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for file_path in generated_path.iterdir():
             if file_path.is_file():
                 zip_file.write(file_path, arcname=file_path.name)
 
+    # Important: seek to beginning AFTER closing the zip
     zip_buffer.seek(0)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
