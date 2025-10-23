@@ -42,6 +42,7 @@ except ImportError:
 
 from .security import SecurityManager
 from .clinical_coherence import ClinicalCoherenceEngine
+from .realistic_templates import get_realistic_template
 
 logger = logging.getLogger(__name__)
 
@@ -593,8 +594,8 @@ class SyntheticHealthDataGenerator:
             # Select document type
             doc_type = random.choice(document_types)
             
-            # Generate realistic medical content
-            content = self._generate_realistic_medical_content(doc_type, patient)
+            # Generate benchmark-quality realistic medical content
+            content = self._generate_benchmark_quality_content(doc_type, patient)
             
             # Create documents in requested formats
             for fmt in formats:
@@ -1457,3 +1458,173 @@ Date: {datetime.now().strftime('%m/%d/%Y')}
         text = text.replace('"', '&quot;')
         text = text.replace("'", '&apos;')
         return text
+    def _generate_benchmark_quality_content(self, doc_type: str, patient: SyntheticPatientRecord) -> str:
+        """
+        Generate benchmark-quality realistic medical content.
+        
+        Creates documents that:
+        - Have 20-50 PHI identifiers (realistic density)
+        - Use narrative clinical writing style  
+        - Match actual medical record patterns
+        - Suitable for benchmarking PHI classifiers
+        """
+        # Map old doc types to new realistic templates
+        template_map = {
+            'medical_record': 'progress_note',
+            'laboratory_report': 'lab_report_focused',
+            'discharge_summary': 'discharge_summary',
+            'consultation_note': 'consultation_note',
+            'prescription': 'progress_note'
+        }
+        
+        template_type = template_map.get(doc_type, 'progress_note')
+        template = get_realistic_template(template_type)
+        
+        # Generate narrative medical details
+        complaint_details = [
+            "intermittent symptoms that are well-controlled on current therapy",
+            "some improvement since last visit, though occasional flare-ups persist",
+            "stable symptoms without significant changes",
+            "good response to treatment regimen"
+        ]
+        
+        # Prepare template data - only realistic fields
+        template_data = {
+            'facility_name': patient.facility_name,
+            'facility_address': patient.facility_address,
+            'facility_phone': patient.facility_phone,
+            'city': patient.city,
+            'state': patient.state,
+            'zip_code': patient.zip_code,
+            'first_name': patient.first_name,
+            'last_name': patient.last_name,
+            'mrn': patient.mrn,
+            'date_of_birth': patient.date_of_birth,
+            'age': patient.age,
+            'gender': patient.gender,
+            'phone_mobile': patient.phone_mobile,
+            'primary_diagnosis': patient.primary_diagnosis,
+            'visit_date': (datetime.now() - timedelta(days=random.randint(0, 30))).strftime('%m/%d/%Y'),
+            'last_visit_date': (datetime.now() - timedelta(days=random.randint(60, 180))).strftime('%m/%d/%Y'),
+            'next_visit_date': (datetime.now() + timedelta(days=random.randint(60, 120))).strftime('%m/%d/%Y'),
+            'complaint_detail': random.choice(complaint_details),
+            'medication_list_narrative': self._format_medications_narrative(patient.medications[:3]),
+            'allergy_list_simple': ', '.join(patient.allergies[:2]) if patient.allergies else 'NKDA',
+            'bp_systolic': random.randint(110, 140),
+            'bp_diastolic': random.randint(70, 90),
+            'heart_rate': random.randint(60, 90),
+            'temperature': round(random.uniform(97.0, 99.0), 1),
+            'weight': random.randint(120, 220),
+            'resp_rate': random.randint(12, 20),
+            'med1': patient.medications[0]['generic_name'] if patient.medications else 'as prescribed',
+            'med2': patient.medications[1]['generic_name'] if len(patient.medications) > 1 else 'multivitamin',
+            'med3': patient.medications[2]['generic_name'] if len(patient.medications) > 2 else 'aspirin',
+            'attending_physician': patient.attending_physician,
+            'physician_npi': patient.physician_npi,
+            'physician_license': patient.physician_license,
+            'pcp_name': patient.primary_care_provider,
+            'pcp_phone': f"({random.randint(200, 999)}) {random.randint(200, 999)}-{random.randint(1000, 9999)}",
+            'admission_date': patient.admission_date,
+            'discharge_date': patient.discharge_date,
+            'note_date': datetime.now().strftime('%m/%d/%Y %H:%M'),
+            'admission_diagnosis': patient.primary_diagnosis,
+            'clinical_course_detail': "gradual improvement with appropriate medication management",
+            'lab_finding1': f"{list(patient.lab_results.keys())[0]} of {list(patient.lab_results.values())[0]}" if patient.lab_results else "normal values",
+            'lab_finding2': "improvement toward normal ranges",
+            'treatment1': patient.medications[0]['generic_name'] if patient.medications else "supportive care",
+            'treatment2': "close monitoring",
+            'consultant1': f"Dr. {random.choice(self.demographics['last_names'])}",
+            'consultant2': f"Dr. {random.choice(self.demographics['last_names'])}",
+            'consultation_recommendation': "continuation of current treatment plan",
+            'improvement_date': (datetime.now() - timedelta(days=random.randint(1, 5))).strftime('%m/%d/%Y'),
+            'discharge_med_list': self._format_medications_narrative(patient.medications[:4]),
+            'consult_date': datetime.now().strftime('%m/%d/%Y'),
+            'consult_reason': patient.primary_diagnosis,
+            'referring_physician': f"Dr. {random.choice(self.demographics['last_names'])}",
+            'symptom_description': random.choice(complaint_details),
+            'symptom_duration': f"{random.randint(1, 12)} weeks",
+            'comorbidity1': random.choice(['hypertension', 'hyperlipidemia', 'diabetes']),
+            'comorbidity2': random.choice(['obesity', 'sleep apnea', 'GERD']),
+            'cv_review': "Patient denies chest pain, palpitations",
+            'cv_exam_findings': "Regular rate and rhythm, no murmurs appreciated",
+            'lung_findings': "Clear to auscultation bilaterally",
+            'ecg_date': (datetime.now() - timedelta(days=random.randint(1, 30))).strftime('%m/%d/%Y'),
+            'ecg_findings': "Normal sinus rhythm, no acute ST changes",
+            'lab_date': (datetime.now() - timedelta(days=random.randint(1, 14))).strftime('%m/%d/%Y'),
+            'relevant_labs': "Within normal limits",
+            'assessment_paragraph': f"This is a {patient.age}-year-old {patient.gender} with {patient.primary_diagnosis}. Overall condition is stable with appropriate management.",
+            'recommendation1': f"Continue {patient.medications[0]['generic_name']}" if patient.medications else "Continue current management",
+            'recommendation2': "Schedule follow-up echocardiogram in 6 months",
+            'recommendation3': "Maintain current medication regimen",
+            'followup_interval': "3-6 months",
+            'consult_phone': patient.facility_phone,
+            'consultant_name': f"Dr. {random.choice(self.demographics['last_names'])}",
+            'consultant_npi': f"{random.randint(1000000000, 1999999999)}",
+            'lab_phone': patient.facility_phone,
+            'collection_date': (datetime.now() - timedelta(days=random.randint(1, 7))).strftime('%m/%d/%Y'),
+            'ordering_physician': patient.attending_physician,
+            'provider_phone': patient.facility_phone,
+            'test_panel_name': random.choice(['Complete Blood Count', 'Basic Metabolic Panel', 'Lipid Panel']),
+            'test_results_narrative': self._format_lab_results_narrative(patient.lab_results),
+            'test_interpretation': "Results reviewed. No critical abnormalities noted.",
+            'call_date': datetime.now().strftime('%m/%d/%Y'),
+            'call_time': f"{random.randint(8, 17)}:{random.randint(0, 59):02d}",
+            'tech_name': f"{random.choice(self.demographics['first_names_female'])} {random.choice(self.demographics['last_names'])}",
+            'report_date': datetime.now().strftime('%m/%d/%Y'),
+            'lab_name': f"{patient.facility_name} Laboratory",
+            'clia_number': f"{random.randint(10, 99)}D{random.randint(1000000, 9999999)}",
+            'medical_director': f"Dr. {random.choice(self.demographics['last_names'])}"
+        }
+        
+        try:
+            return template.format(**template_data)
+        except KeyError as e:
+            logger.warning(f"Template key error: {e}. Using fallback.")
+            return f"""
+{patient.facility_name}
+
+PROGRESS NOTE
+
+Patient: {patient.last_name}, {patient.first_name}
+MRN: {patient.mrn}
+DOB: {patient.date_of_birth}
+Date: {datetime.now().strftime('%m/%d/%Y')}
+
+CHIEF COMPLAINT:
+Follow-up of {patient.primary_diagnosis}.
+
+HISTORY:
+{patient.first_name} {patient.last_name} is a {patient.age}-year-old {patient.gender} with {patient.primary_diagnosis} who presents for routine follow-up. Patient reports stable symptoms. Medications taken as prescribed.
+
+CURRENT MEDICATIONS:
+{self._format_medications_narrative(patient.medications[:3])}
+
+VITAL SIGNS:
+BP: {random.randint(110, 140)}/{random.randint(70, 90)}, HR: {random.randint(60, 90)}, Temp: {round(random.uniform(97.0, 99.0), 1)}°F
+
+ASSESSMENT AND PLAN:
+1. {patient.primary_diagnosis} - Continue current management
+Patient doing well on current regimen.
+
+Dr. {patient.attending_physician}
+NPI: {patient.physician_npi}
+"""
+    
+    def _format_medications_narrative(self, medications: List[Dict[str, str]]) -> str:
+        """Format medications in narrative style."""
+        if not medications:
+            return "None currently"
+        med_list = []
+        for med in medications[:4]:
+            med_str = f"{med['generic_name']} {med.get('strength', '').split()[0] if med.get('strength') else ''} {med.get('frequency', 'daily')}"
+            med_list.append(med_str)
+        return ', '.join(med_list)
+    
+    def _format_lab_results_narrative(self, lab_results: Dict[str, Any]) -> str:
+        """Format lab results in narrative style."""
+        if not lab_results:
+            return "No recent results"
+        results_list = []
+        for test, value in list(lab_results.items())[:5]:
+            results_list.append(f"{test}: {value}")
+        return '\n'.join(results_list)
