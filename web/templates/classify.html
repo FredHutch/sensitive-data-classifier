@@ -1,19 +1,248 @@
 {% extends "base.html" %}
 
+{% block title %}Classify Documents - PHI Classifier{% endblock %}
+
 {% block content %}
-<h2>Document Classification</h2>
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">
+            <i class="fas fa-search me-2"></i>Document Classification
+        </h2>
+        <p class="lead">Upload documents to check for Protected Health Information (PHI)</p>
+    </div>
+</div>
 
-<form id="classify-form" class="card" enctype="multipart/form-data">
-  <div class="dropzone" id="dropzone">
-    <p>Drop files here or click to select</p>
-    <input id="file-input" type="file" name="files" multiple>
-    <small>Supported: .txt, .docx, .pdf, .csv, .xlsx</small>
-  </div>
-  <button type="submit" class="btn btn-primary">Classify</button>
-</form>
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="fas fa-upload me-2"></i>Upload Documents</h5>
+    </div>
+    <div class="card-body">
+        <form id="classify-form" enctype="multipart/form-data">
+            <div class="dropzone" id="dropzone">
+                <i class="fas fa-cloud-upload-alt fa-3x mb-3 text-muted"></i>
+                <p class="mb-2"><strong>Drag & drop files here or click to browse</strong></p>
+                <input id="file-input" type="file" name="files" multiple accept=".txt,.docx,.pdf,.csv,.xlsx" style="display: none;">
+                <small class="text-muted">Supported formats: .txt, .docx, .pdf, .csv, .xlsx</small>
+                <div id="file-list" class="mt-3"></div>
+            </div>
+            <button type="submit" class="btn btn-primary mt-3" id="classify-btn" disabled>
+                <i class="fas fa-search me-2"></i>Classify Documents
+            </button>
+        </form>
+    </div>
+</div>
 
-<section id="results" class="card" style="display:none;">
-  <h3>Results</h3>
-  <div id="results-list"></div>
-</section>
+<div id="results" class="card" style="display:none;">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i>Classification Results</h5>
+    </div>
+    <div class="card-body">
+        <div id="results-list"></div>
+    </div>
+</div>
+
+<style>
+.dropzone {
+    border: 3px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 3rem 2rem;
+    text-align: center;
+    background: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.dropzone.drag-over {
+    border-color: #005EB8;
+    background-color: #e3f2fd;
+}
+
+.dropzone:hover {
+    border-color: #005EB8;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    margin-bottom: 0.5rem;
+}
+
+.file-item i {
+    margin-right: 0.5rem;
+    color: #005EB8;
+}
+
+.result-item {
+    padding: 1rem;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+    background: white;
+}
+
+.badge-high { background-color: #dc3545; }
+.badge-medium { background-color: #ffc107; }
+.badge-low { background-color: #28a745; }
+.badge-none { background-color: #6c757d; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('classify-form');
+    const fileInput = document.getElementById('file-input');
+    const dropzone = document.getElementById('dropzone');
+    const fileList = document.getElementById('file-list');
+    const results = document.getElementById('results');
+    const resultsList = document.getElementById('results-list');
+    const classifyBtn = document.getElementById('classify-btn');
+
+    let selectedFiles = [];
+
+    // Make dropzone clickable
+    dropzone.addEventListener('click', (e) => {
+        if (e.target !== fileInput) {
+            fileInput.click();
+        }
+    });
+
+    // Handle file selection
+    fileInput.addEventListener('change', function(e) {
+        handleFiles(this.files);
+    });
+
+    // Drag and drop handlers
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('drag-over');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('drag-over');
+        });
+    });
+
+    dropzone.addEventListener('drop', function(e) {
+        const files = e.dataTransfer.files;
+        handleFiles(files);
+    });
+
+    function handleFiles(files) {
+        selectedFiles = Array.from(files);
+        displayFiles();
+        classifyBtn.disabled = selectedFiles.length === 0;
+    }
+
+    function displayFiles() {
+        if (selectedFiles.length === 0) {
+            fileList.innerHTML = '';
+            return;
+        }
+
+        fileList.innerHTML = `
+            <div class="mt-3">
+                <strong>${selectedFiles.length} file(s) selected:</strong>
+                ${selectedFiles.map(file => `
+                    <div class="file-item">
+                        <i class="fas fa-file-alt"></i>
+                        <span>${file.name}</span>
+                        <small class="ms-auto text-muted">${formatBytes(file.size)}</small>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        if (selectedFiles.length === 0) {
+            alert('Please select files to classify');
+            return;
+        }
+
+        classifyBtn.disabled = true;
+        classifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Classifying...';
+
+        const formData = new FormData();
+        selectedFiles.forEach(file => {
+            formData.append('files', file);
+        });
+
+        try {
+            const response = await fetch('/api/classify', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.status !== 'success') {
+                alert(data.message || 'Classification failed');
+                return;
+            }
+
+            // Show results
+            results.style.display = 'block';
+            resultsList.innerHTML = data.results.map(r => {
+                const riskClass = r.risk_level === 'HIGH' ? 'badge-high' :
+                                 r.risk_level === 'MEDIUM' ? 'badge-medium' :
+                                 r.risk_level === 'LOW' ? 'badge-low' : 'badge-none';
+
+                return `
+                    <div class="result-item">
+                        <h6><i class="fas fa-file me-2"></i>${r.filename}</h6>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <strong>Contains PHI:</strong>
+                                <span class="badge ${r.contains_phi ? 'bg-danger' : 'bg-success'}">
+                                    ${r.contains_phi ? 'YES' : 'NO'}
+                                </span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Risk Level:</strong>
+                                <span class="badge ${riskClass}">${r.risk_level}</span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Confidence:</strong>
+                                ${(r.confidence * 100).toFixed(1)}%
+                            </div>
+                            <div class="col-md-3">
+                                <strong>PHI Identifiers:</strong>
+                                ${r.total_identifiers || 0}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Scroll to results
+            results.scrollIntoView({ behavior: 'smooth' });
+
+        } catch (error) {
+            alert('Error: ' + error.message);
+        } finally {
+            classifyBtn.disabled = false;
+            classifyBtn.innerHTML = '<i class="fas fa-search me-2"></i>Classify Documents';
+        }
+    });
+});
+</script>
 {% endblock %}
