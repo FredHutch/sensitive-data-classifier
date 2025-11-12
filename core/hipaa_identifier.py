@@ -70,7 +70,8 @@ class HIPAAIdentifier:
             'medical_record_numbers': [
                 r'(?i)(?:mrn|medical\s*record|record\s*number|chart\s*number|patient\s*id):?\s*[A-Z0-9-]{4,15}',
                 r'\bMR\d{4,12}\b',
-                r'\b(?:MRN|PT|PAT)\d{4,12}\b'
+                r'\b(?:MRN|PT|PAT)\d{4,12}\b',
+                r'(?i)\bU\d{7}\b'  # Organization-specific MRN format: U followed by 7 digits
             ],
             'health_plan_numbers': [
                 r'(?i)(?:insurance|policy|member|subscriber|medicaid|medicare|plan):?\s*(?:number|id|#):?\s*[A-Z0-9-]{6,20}',
