@@ -55,6 +55,15 @@ try:
 except ImportError:
     HAS_MAGIC = False
 
+# OCR libraries for scanned documents
+try:
+    import pytesseract
+    from PIL import Image
+    from pdf2image import convert_from_bytes, convert_from_path
+    HAS_OCR = True
+except ImportError:
+    HAS_OCR = False
+
 from .security import SecurityManager
 
 logger = logging.getLogger(__name__)
@@ -75,9 +84,16 @@ class DocumentProcessor:
             '.pdf': self._process_pdf_file,
             '.csv': self._process_csv_file,
             '.xlsx': self._process_excel_file,
-            '.json': self._process_json_file
+            '.json': self._process_json_file,
+            # Image formats (OCR)
+            '.png': self._process_image_file,
+            '.jpg': self._process_image_file,
+            '.jpeg': self._process_image_file,
+            '.tiff': self._process_image_file,
+            '.tif': self._process_image_file,
+            '.bmp': self._process_image_file
         }
-        
+
         # File type detection patterns
         self.mime_types = {
             'text/plain': '.txt',
@@ -85,7 +101,11 @@ class DocumentProcessor:
             'application/pdf': '.pdf',
             'text/csv': '.csv',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
-            'application/json': '.json'
+            'application/json': '.json',
+            'image/png': '.png',
+            'image/jpeg': '.jpg',
+            'image/tiff': '.tiff',
+            'image/bmp': '.bmp'
         }
         
         # Processing statistics
@@ -379,7 +399,15 @@ class DocumentProcessor:
                     return {'success': False, 'error': f'PDF extraction failed: {e2}', 'text': ''}
             
             full_text = '\n'.join(text_parts)
-            
+
+            # If no text was extracted, try OCR on scanned PDF
+            if not full_text.strip() and HAS_OCR:
+                logger.info("No text extracted from PDF, attempting OCR on scanned document")
+                file_stream.seek(0)
+                ocr_result = self._process_pdf_with_ocr(file_stream, filename)
+                if ocr_result['success']:
+                    return ocr_result
+
             return {
                 'success': True,
                 'text': full_text,
@@ -388,7 +416,7 @@ class DocumentProcessor:
                 'page_count': page_count,
                 'extraction_method': 'pdfplumber' if text_parts else 'PyPDF2'
             }
-            
+
         except Exception as e:
             logger.error(f"PDF processing error: {e}")
             return {'success': False, 'error': str(e), 'text': ''}
@@ -677,10 +705,107 @@ class DocumentProcessor:
             'processed_at': datetime.now().isoformat()
         }
     
+    def _process_pdf_with_ocr(self, file_obj, filename: str) -> Dict[str, Any]:
+        """
+        Process scanned PDF using OCR.
+
+        Args:
+            file_obj: File object or file content
+            filename: Filename
+
+        Returns:
+            Dict[str, Any]: Processing result with extracted text
+        """
+        if not HAS_OCR:
+            return {'success': False, 'error': 'OCR libraries not available', 'text': ''}
+
+        try:
+            # Convert file to bytes if needed
+            if isinstance(file_obj, bytes):
+                pdf_bytes = file_obj
+            else:
+                pdf_bytes = file_obj.read()
+
+            # Convert PDF pages to images
+            logger.info(f"Converting PDF pages to images for OCR: {filename}")
+            images = convert_from_bytes(pdf_bytes, dpi=300)
+
+            text_parts = []
+            for i, image in enumerate(images):
+                logger.debug(f"Processing page {i+1}/{len(images)} with OCR")
+                # Perform OCR on each page
+                page_text = pytesseract.image_to_string(image, lang='eng', config='--psm 1')
+                if page_text.strip():
+                    text_parts.append(page_text)
+
+            full_text = '\n\n'.join(text_parts)
+
+            return {
+                'success': True,
+                'text': full_text,
+                'word_count': len(full_text.split()),
+                'character_count': len(full_text),
+                'page_count': len(images),
+                'extraction_method': 'OCR (Tesseract)',
+                'ocr_applied': True
+            }
+
+        except Exception as e:
+            logger.error(f"PDF OCR processing error: {e}")
+            return {'success': False, 'error': f'OCR failed: {str(e)}', 'text': ''}
+
+    def _process_image_file(self, file_obj, filename: str) -> Dict[str, Any]:
+        """
+        Process image files using OCR.
+
+        Args:
+            file_obj: File object or file content
+            filename: Filename
+
+        Returns:
+            Dict[str, Any]: Processing result with extracted text
+        """
+        if not HAS_OCR:
+            return {'success': False, 'error': 'OCR libraries not available', 'text': ''}
+
+        try:
+            # Convert file to bytes if needed
+            if isinstance(file_obj, bytes):
+                image_bytes = file_obj
+            else:
+                image_bytes = file_obj.read()
+
+            # Open image with PIL
+            image = Image.open(io.BytesIO(image_bytes))
+
+            # Perform OCR
+            logger.info(f"Performing OCR on image: {filename}")
+            text = pytesseract.image_to_string(image, lang='eng', config='--psm 1')
+
+            # Get image metadata
+            width, height = image.size
+            format_name = image.format or 'Unknown'
+
+            return {
+                'success': True,
+                'text': text,
+                'word_count': len(text.split()),
+                'character_count': len(text),
+                'extraction_method': 'OCR (Tesseract)',
+                'image_width': width,
+                'image_height': height,
+                'image_format': format_name,
+                'ocr_applied': True
+            }
+
+        except Exception as e:
+            logger.error(f"Image OCR processing error: {e}")
+            return {'success': False, 'error': f'Image OCR failed: {str(e)}', 'text': ''}
+
     def get_processing_stats(self) -> Dict[str, Any]:
         """
         Get processing statistics.
-        
+
         Returns:
             Dict[str, Any]: Processing statistics
         """
@@ -691,7 +816,8 @@ class DocumentProcessor:
                 'docx': HAS_DOCX,
                 'pdf': HAS_PDF,
                 'excel': HAS_EXCEL,
-                'magic': HAS_MAGIC
+                'magic': HAS_MAGIC,
+                'ocr': HAS_OCR
             }
         }
     

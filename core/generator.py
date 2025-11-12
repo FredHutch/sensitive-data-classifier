@@ -645,7 +645,7 @@ class SyntheticHealthDataGenerator:
         
         # Generate all HIPAA identifiers
         ssn = f"{random.randint(100, 899)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}"
-        mrn = f"MR{random.randint(100000, 999999)}"
+        mrn = f"U{random.randint(1000000, 9999999)}"  # Organization-specific format: U + 7 digits
         account_number = f"ACCT{random.randint(1000000, 9999999)}"
         insurance_id = f"INS{random.randint(100000000, 999999999)}"
         driver_license = f"{random.choice(self.demographics['states'])}{random.randint(1000000, 9999999)}"

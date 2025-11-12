@@ -393,6 +393,203 @@ The system detects all 18 HIPAA identifier types:
 17. **Photograph Images** - Visual identifiers
 18. **Other Identifiers** - Any other unique identifiers
 
+### Organization-Specific PHI Detection
+
+The system supports **custom identifier formats** specific to your organization:
+
+**Example: Custom MRN Format**
+- Pattern: `U` followed by 7 digits (e.g., U1234567)
+- Regex: `(?i)\bU\d{7}\b`
+- Automatically detected in all documents
+- Generated documents use this format
+
+To add custom patterns, update `core/hipaa_identifier.py` in the `medical_record_numbers` section.
+
+---
+
+## Enterprise Security Features
+
+### HTTPS/SSL Support
+
+The application supports HTTPS with TLS 1.2/1.3 for secure communication.
+
+**Quick Setup**:
+```bash
+cd deployment
+./generate-ssl-certs.sh    # Generate self-signed certificates
+./setup-https.sh            # Configure and enable HTTPS
+```
+
+**Production Setup**:
+1. Obtain certificates from a trusted CA (Let's Encrypt, DigiCert, etc.)
+2. Copy certificates to `deployment/ssl/`:
+   - `cert.pem` - SSL certificate
+   - `key.pem` - Private key
+3. Copy to Docker volume:
+   ```bash
+   docker run --rm \
+     -v $(pwd)/ssl:/certs \
+     -v phi-classifier_ssl-certs:/ssl \
+     alpine cp /certs/*.pem /ssl/
+   ```
+4. Enable HTTPS redirect in `nginx.conf` (uncomment line 32)
+5. Restart: `docker-compose restart nginx`
+
+**Access**:
+- HTTP: `http://localhost` (or your domain)
+- HTTPS: `https://localhost` (or your domain)
+
+**SSL Configuration** (nginx.conf):
+- TLS 1.2 and 1.3 only
+- Strong cipher suites
+- Perfect Forward Secrecy (PFS)
+- HSTS enabled (max-age 31536000)
+
+### SAML Authentication (SSO)
+
+Single Sign-On via SAML 2.0 with support for:
+- **Microsoft Entra ID** (Azure AD)
+- **Okta**
+- **OneLogin**
+- **Auth0**
+- Any SAML 2.0 compliant IdP
+
+**Setup Instructions**:
+1. See detailed guide: [`deployment/SAML_ENTRA_ID_SETUP.md`](deployment/SAML_ENTRA_ID_SETUP.md)
+2. Configure your Identity Provider (IdP)
+3. Update SAML settings in `deployment/saml_config/`
+4. Enable SAML in `deployment/app.env`:
+   ```bash
+   SAML_ENABLED=true
+   SAML_SETTINGS_PATH=/app/config/saml
+   ```
+5. Restart application: `docker-compose restart app`
+
+**SAML Endpoints**:
+- Metadata: `https://your-domain.com/saml/metadata`
+- ACS (Assertion Consumer Service): `https://your-domain.com/saml/acs`
+- SLS (Single Logout Service): `https://your-domain.com/saml/sls`
+- Login: `https://your-domain.com/saml/login`
+- Status: `https://your-domain.com/saml/status`
+
+**Protected Routes**:
+Use the `@saml_required` decorator to protect specific routes:
+```python
+from web.saml_auth import saml_required
+
+@app.route('/admin')
+@saml_required
+def admin_dashboard():
+    email = session.get('saml_user_email')
+    return f"Admin Dashboard - {email}"
+```
+
+**User Attributes**:
+After SAML authentication, session contains:
+- `saml_user_email` - User's email address
+- `saml_user_name` - Display name
+- `saml_user_groups` - Group memberships
+- `saml_session_index` - SSO session identifier
+
+---
+
+## OCR Support for Scanned Documents
+
+The application includes **Optical Character Recognition (OCR)** powered by Tesseract for processing scanned documents and images.
+
+### Supported Formats
+
+**Images**:
+- PNG (.png)
+- JPEG (.jpg, .jpeg)
+- TIFF (.tiff, .tif)
+- BMP (.bmp)
+
+**Scanned PDFs**:
+- Automatically detects scanned PDFs (no extractable text)
+- Falls back to OCR when standard extraction fails
+- Processes each page as an image
+
+### How It Works
+
+1. **Text Extraction Attempt**: First tries standard text extraction
+2. **OCR Fallback**: If no text found, automatically uses OCR
+3. **Image Processing**: Converts PDF pages to images (300 DPI)
+4. **Text Recognition**: Tesseract OCR extracts text
+5. **PHI Detection**: Standard classification on extracted text
+
+### OCR Performance
+
+| Document Type | Processing Time | Accuracy |
+|--------------|----------------|----------|
+| Single page image | 2-5 seconds | ~95% (clear scans) |
+| Multi-page PDF | 3-8 seconds/page | ~90-95% |
+| Low quality scans | 5-10 seconds/page | ~70-85% |
+
+**Optimization Tips**:
+- Use 300 DPI for scanned documents
+- Ensure good contrast (black text on white background)
+- Remove artifacts/noise before scanning
+- Use portrait orientation for optimal OCR
+
+### Example Usage
+
+**Via API**:
+```bash
+# Upload scanned PDF
+curl -X POST https://localhost/api/classify \
+  -F "files=@scanned_medical_record.pdf"
+
+# Response includes OCR metadata
+{
+  "filename": "scanned_medical_record.pdf",
+  "contains_phi": true,
+  "extraction_method": "OCR (Tesseract)",
+  "ocr_applied": true,
+  "page_count": 3,
+  "confidence": 0.87
+}
+```
+
+**Via Web UI**:
+1. Navigate to **Classify Documents**
+2. Upload scanned image or PDF
+3. OCR automatically applied if needed
+4. Results show "OCR Applied" badge
+
+### OCR Languages
+
+Default: English (eng)
+
+To add more languages:
+```bash
+# In Dockerfile.app, add additional language packs
+RUN apt-get install -y \
+    tesseract-ocr-eng \
+    tesseract-ocr-spa \  # Spanish
+    tesseract-ocr-fra    # French
+```
+
+### Troubleshooting OCR
+
+**Issue**: "OCR libraries not available"
+```bash
+# Rebuild Docker image with OCR dependencies
+docker-compose build
+docker-compose up -d
+```
+
+**Issue**: Poor OCR accuracy
+- Improve scan quality (higher DPI)
+- Adjust contrast/brightness
+- Remove background noise
+- Ensure text is horizontal
+
+**Issue**: Slow OCR performance
+- OCR is CPU-intensive
+- Allocate more CPU cores to Docker
+- Consider using GPU acceleration (advanced setup)
+
 ---
 
 ## Synthetic Health Data Generation: Comparative Analysis

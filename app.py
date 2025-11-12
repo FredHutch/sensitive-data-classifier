@@ -12,10 +12,13 @@ Features:
 - API authentication and rate limiting
 - Production-ready deployment with Gunicorn
 - Environment-based configuration
+- SAML/SSO authentication (optional)
 """
 
+import os
 import logging
 from flask import Flask
+from flask_session import Session
 from pathlib import Path
 
 # Configuration
@@ -87,8 +90,32 @@ def create_app() -> Flask:
         logger.error(f"Failed to initialize services: {e}", exc_info=True)
         raise
 
+    # Configure Flask sessions for SAML
+    app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
+    app.config['SESSION_FILE_DIR'] = os.environ.get('SESSION_FILE_DIR', '/app/flask_sessions')
+    app.config['SESSION_PERMANENT'] = False
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_KEY_PREFIX'] = 'phi_classifier:'
+
+    # Initialize session if SAML is enabled
+    if os.environ.get('SAML_ENABLED', 'false').lower() == 'true':
+        Session(app)
+        logger.info("Flask-Session initialized for SAML authentication")
+
     # Register web blueprint
     app.register_blueprint(web_bp)
+
+    # Register SAML blueprint if enabled
+    if os.environ.get('SAML_ENABLED', 'false').lower() == 'true':
+        try:
+            from web.saml_auth import saml_bp
+            app.register_blueprint(saml_bp)
+            logger.info("SAML authentication enabled")
+        except ImportError as e:
+            logger.error(f"Failed to import SAML blueprint: {e}")
+            logger.error("Install SAML dependencies: pip install python3-saml flask-session")
+    else:
+        logger.info("SAML authentication disabled")
 
     # Health check endpoint
     @app.get("/health")
